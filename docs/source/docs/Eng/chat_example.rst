@@ -11,40 +11,40 @@ ReEdgeGPT Chat Example
     from re_edge_gpt import ConversationStyle
 
 
+    # If you are using jupyter pls install this package
+    # from nest_asyncio import apply
+
+
     async def test_ask() -> None:
-        # Read local bing_cookies.json (if you don't have this file please read README)
-        cookies = json.loads(open(
-            str(Path(str(Path.cwd()) + "/bing_cookies.json")), encoding="utf-8").read())
-        # init BOT
-        bot = await Chatbot.create(cookies=cookies)
-        # Start chat and get Bing response
-        response = await bot.ask(
-            prompt="Hello.",
-            conversation_style=ConversationStyle.balanced,
-            simplify_response=True,
-        )
-        print(json.dumps(response, indent=2))
-        response = await bot.ask(
-            prompt="How do I make a cake?",
-            conversation_style=ConversationStyle.balanced,
-            simplify_response=True,
-        )
-        print(json.dumps(response, indent=2))
-        response = await bot.ask(
-            prompt="Can you suggest me an easy recipe for beginners?",
-            conversation_style=ConversationStyle.balanced,
-            simplify_response=True,
-        )
-        print(json.dumps(response, indent=2))
-        response = await bot.ask(
-            prompt="Thanks",
-            conversation_style=ConversationStyle.balanced,
-            simplify_response=True,
-        )
-        print(json.dumps(response, indent=2))
-        # Close bot
-        await bot.close()
+        bot = None
+        try:
+            cookies = json.loads(open(
+                str(Path(str(Path.cwd()) + "/bing_cookies.json")), encoding="utf-8").read())
+            bot = await Chatbot.create(cookies=cookies)
+            response = await bot.ask(
+                prompt="How to boil the egg",
+                conversation_style=ConversationStyle.balanced,
+                simplify_response=True
+            )
+            # If you are using non ascii char you need set ensure_ascii=False
+            print(json.dumps(response, indent=2, ensure_ascii=False))
+            # Raw response
+            # print(response)
+            assert response
+        except Exception as error:
+            raise error
+        finally:
+            if bot is not None:
+                await bot.close()
+
 
     if __name__ == "__main__":
-        loop = asyncio.get_event_loop()
+        # If you are using jupyter pls use nest_asyncio apply()
+        # apply()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
         loop.run_until_complete(test_ask())
+
+

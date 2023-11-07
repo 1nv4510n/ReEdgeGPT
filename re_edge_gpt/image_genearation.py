@@ -12,9 +12,10 @@ from typing import List
 from typing import Union
 
 import httpx
-import pkg_resources
 import regex
 import requests
+
+from re_edge_gpt.proxy import get_proxy
 
 take_ip_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 take_ip_socket.connect(("8.8.8.8", 80))
@@ -24,18 +25,18 @@ take_ip_socket.close()
 BING_URL = os.getenv("BING_URL", "https://www.bing.com")
 
 HEADERS = {
-    "accept": "text/html,application/xhtml+xml,application/"
-              "xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-    "accept-language": "en-US,en;q=0.9",
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+              "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.77",
+    "accept-language": "en,zh-TW;q=0.9,zh;q=0.8,en-GB;q=0.7,en-US;q=0.6",
     "cache-control": "max-age=0",
     "content-type": "application/x-www-form-urlencoded",
     "referrer": "https://www.bing.com/images/create/",
     "origin": "https://www.bing.com",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/115.0.0.0 "
+                  "Chrome/119.0.0.0 "
                   "Safari/537.36 "
-                  "Edg/115.0.1901.188",
+                  "Edg/119.0.0.0",
     "x-forwarded-for": FORWARDED_IP,
 }
 
@@ -80,8 +81,18 @@ class ImageGen:
             debug_file: Union[str, None] = None,
             quiet: bool = False,
             all_cookies: List[Dict] = None,
+            proxy: str = None,
+            proxy_user: Dict[str, str] = None
     ) -> None:
+        if proxy_user is None:
+            proxy_user = {"http_user": "http", "https_user": "https"}
         self.session: requests.Session = requests.Session()
+        self.proxy: str = get_proxy(proxy)
+        if self.proxy is not None:
+            self.session.proxies.update({
+                proxy_user.get("http_user", "http"): self.proxy,
+                proxy_user.get("https_user", "https"): self.proxy
+            })
         self.session.headers = HEADERS
         self.session.cookies.set("_U", auth_cookie)
         if all_cookies:
@@ -92,13 +103,13 @@ class ImageGen:
         if self.debug_file:
             self.debug = partial(debug, self.debug_file)
 
-    def get_images(self, prompt: str) -> Union[list, None]:
+    def get_images(self, prompt: str, timeout: int = 200, max_generate_time_sec: int = 60) -> Union[list, None]:
         """
         Fetches image links from Bing
         Parameters:
-            prompt: str
-            :param prompt:
-            :param max_image_count:
+            :param prompt: str -> prompt to gen image
+            :param timeout: int -> timeout
+            :param max_generate_time_sec: time limit of generate image
         """
         if not self.quiet:
             print(sending_message)
@@ -112,7 +123,7 @@ class ImageGen:
             url,
             allow_redirects=False,
             data=payload,
-            timeout=200,
+            timeout=timeout,
         )
         # check for content waring message
         if "this prompt is being reviewed" in response.text.lower():
@@ -137,9 +148,9 @@ class ImageGen:
         if response.status_code != 302:
             # if rt4 fails, try rt3
             url = f"{BING_URL}/images/create?q={url_encoded_prompt}&rt=3&FORM=GUH2CR"
-            response = self.session.post(url, allow_redirects=False, timeout=200)
+            response = self.session.post(url, allow_redirects=False, timeout=timeout)
             if response.status_code != 302:
-                print("Image Creating Please Retry Later", end="", flush=True)
+                print("Image create failed pls check cookie or old image still creating", flush=True)
                 return
                 # Get redirect URL
         redirect_url = response.headers["Location"].replace("&nfy=1", "")
@@ -153,6 +164,7 @@ class ImageGen:
         if not self.quiet:
             print("Waiting for results...")
         start_wait = time.time()
+        time_sec = 0
         while True:
             if int(time.time() - start_wait) > 200:
                 if self.debug_file:
@@ -167,6 +179,9 @@ class ImageGen:
                 raise Exception(error_noresults)
             if not response.text or response.text.find("errorMessage") != -1:
                 time.sleep(1)
+                time_sec = time_sec + 1
+                if time_sec >= max_generate_time_sec:
+                    raise TimeoutError("Out of generate time")
                 continue
             else:
                 break
@@ -256,10 +271,13 @@ class ImageGenAsync:
             debug_file: Union[str, None] = None,
             quiet: bool = False,
             all_cookies: List[Dict] = None,
+            proxy: str = None
     ) -> None:
         if auth_cookie is None and not all_cookies:
             raise Exception("No auth cookie provided")
+        self.proxy: str = get_proxy(proxy)
         self.session = httpx.AsyncClient(
+            proxies=self.proxy,
             headers=HEADERS,
             trust_env=True,
         )
@@ -281,11 +299,13 @@ class ImageGenAsync:
     async def __aexit__(self, *excinfo) -> None:
         await self.session.aclose()
 
-    async def get_images(self, prompt: str) -> Union[list, None]:
+    async def get_images(self, prompt: str, timeout: int = 200, max_generate_time_sec: int = 60) -> Union[list, None]:
         """
         Fetches image links from Bing
         Parameters:
-            prompt: str
+            :param prompt: str -> prompt to gen image
+            :param timeout: int -> timeout
+            :param max_generate_time_sec: time limit of generate image
         """
         if not self.quiet:
             print("Sending request...")
@@ -297,6 +317,7 @@ class ImageGenAsync:
             url,
             follow_redirects=False,
             data={"q": url_encoded_prompt, "qs": "ds"},
+            timeout=timeout
         )
         content = response.text
         if "this prompt has been blocked" in content.lower():
@@ -309,11 +330,11 @@ class ImageGenAsync:
             response = await self.session.post(
                 url,
                 follow_redirects=False,
-                timeout=200,
+                timeout=timeout,
             )
-            if response.status_code != 302:
-                print("Image Creating Please Retry Later", end="", flush=True)
-                return None
+        if response.status_code != 302:
+            print("Image create failed pls check cookie or old image still creating", flush=True)
+            return None
         # Get redirect URL
         redirect_url = response.headers["Location"].replace("&nfy=1", "")
         request_id = redirect_url.split("id=")[-1]
@@ -323,6 +344,7 @@ class ImageGenAsync:
         # Poll for results
         if not self.quiet:
             print("Waiting for results...")
+        time_sec = 0
         while True:
             if not self.quiet:
                 print(".", end="", flush=True)
@@ -335,6 +357,9 @@ class ImageGenAsync:
                 break
 
             await asyncio.sleep(1)
+            time_sec = time_sec + 1
+            if time_sec >= max_generate_time_sec:
+                raise TimeoutError("Out of generate time")
             continue
         # Use regex to search for src=""
         image_links = regex.findall(r'src="([^"]+)"', content)
@@ -359,8 +384,6 @@ class ImageGenAsync:
 
 async def async_image_gen(
         prompt: str,
-        download_count: int,
-        output_dir: str,
         u_cookie=None,
         debug_file=None,
         quiet=False,
@@ -425,7 +448,6 @@ def main():
     args = parser.parse_args()
 
     if args.version:
-        print(pkg_resources.get_distribution("BingImageCreator").version)
         sys.exit()
 
     # Load auth cookie

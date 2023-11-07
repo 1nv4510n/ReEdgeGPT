@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from re_edge_gpt import ImageGen, ImageGenAsync
@@ -9,7 +10,7 @@ from re_edge_gpt import ImageGen, ImageGenAsync
 test_output_dir = "test_output"
 # download a test image
 test_image_url = "https://picsum.photos/200"
-auth_cooker = open("bing_cookies.txt", "r+").read()
+auth_cooker = open("../test_generate_image/bing_cookies.txt", "r+").read()
 sync_gen = ImageGen(auth_cookie=auth_cooker)
 async_gen = ImageGenAsync(auth_cookie=auth_cooker)
 
@@ -40,14 +41,19 @@ async def test_generate_image_async():
 
 
 if __name__ == "__main__":
-    # Make dir to save image
-    Path("test_output").mkdir(exist_ok=True)
-    # Save image
-    test_save_images_sync()
-    # Generate image sync
-    test_generate_image_sync()
-    # Generate image async
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(test_generate_image_async())
-    # Remove dir
-    shutil.rmtree(test_output_dir)
+    try:
+        # Make dir to save image
+        Path("test_output").mkdir(exist_ok=True)
+        # Save image
+        test_save_images_sync()
+        # Generate image sync
+        test_generate_image_sync()
+        # Generate image async
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(test_generate_image_async())
+        # Remove dir
+        shutil.rmtree(test_output_dir)
+    except Exception as error:
+        raise error
+    finally:
+        sys.exit(0)

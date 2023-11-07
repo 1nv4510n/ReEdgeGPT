@@ -21,7 +21,7 @@ If you have any problem watch bottom Q&A first.
 ```bash
 python3 -m pip install re_edge_gpt --upgrade
 ```
-
+* Notice! EdgeGPT is rename to re_edge_gpt
 ## Requirements
 
 - python 3.9+
@@ -120,32 +120,51 @@ options:
 Use Async for the best experience, for example:
 
 ```python
-import asyncio, json
-
+import asyncio
+import json
 from pathlib import Path
-from re_edge_gpt import Chatbot, ConversationStyle
 
-cookies = json.loads(open(str(Path(str(Path.cwd()) + "/bing_cookies.json")), encoding="utf-8").read())
+from re_edge_gpt import Chatbot
+from re_edge_gpt import ConversationStyle
 
-async def main():
-    bot = await Chatbot.create(cookies=cookies)
-    response = await bot.ask(prompt="Hello world", conversation_style=ConversationStyle.creative, simplify_response=True)
-    print(json.dumps(response, indent=2)) # Returns
-    """
-{
-    "text": str,
-    "author": str,
-    "sources": list[dict],
-    "sources_text": str,
-    "suggestions": list[str],
-    "messages_left": int
-}
-    """
-    await bot.close()
+
+# If you are using jupyter pls install this package
+# from nest_asyncio import apply
+
+
+async def test_ask() -> None:
+    bot = None
+    try:
+        cookies = json.loads(open(
+            str(Path(str(Path.cwd()) + "/bing_cookies.json")), encoding="utf-8").read())
+        bot = await Chatbot.create(cookies=cookies)
+        response = await bot.ask(
+            prompt="How to boil the egg",
+            conversation_style=ConversationStyle.balanced,
+            simplify_response=True
+        )
+        # If you are using non ascii char you need set ensure_ascii=False
+        print(json.dumps(response, indent=2, ensure_ascii=False))
+        # Raw response
+        # print(response)
+        assert response
+    except Exception as error:
+        raise error
+    finally:
+        if bot is not None:
+            await bot.close()
+
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    # If you are using jupyter pls use nest_asyncio apply()
+    # apply()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+    loop.run_until_complete(test_ask())
+
+
 ```
 
 </details>
@@ -174,7 +193,6 @@ if __name__ == "__main__":
 > * copy the value from the _U
 
 ```python
-import asyncio
 import os
 import shutil
 from pathlib import Path
@@ -203,13 +221,6 @@ def test_generate_image_sync():
     image_list = sync_gen.get_images("tree")
     print(image_list)
 
-
-# Generate image list async
-async def test_generate_image_async():
-    image_list = await async_gen.get_images("tree")
-    print(image_list)
-
-
 if __name__ == "__main__":
     # Make dir to save image
     Path("test_output").mkdir(exist_ok=True)
@@ -217,9 +228,6 @@ if __name__ == "__main__":
     test_save_images_sync()
     # Generate image sync
     test_generate_image_sync()
-    # Generate image async
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(test_generate_image_async())
     # Remove dir
     shutil.rmtree(test_output_dir)
 ```
@@ -230,23 +238,25 @@ if __name__ == "__main__":
 
 <details open>
 
+> * Q: RuntimeError: This event loop is already running
+>   * A: If you are using Jupyter, pls use nest_asyncio.apply()
+>   * Like: https://github.com/Integration-Automation/ReEdgeGPT/issues/30
+> * Q: json.dumps return non utf-8 char
+>   * A: json.dumps(response, ensure_ascii=False)
+>   * Like: https://github.com/Integration-Automation/ReEdgeGPT/issues/32
 > * Q: Exception: UnauthorizedRequest: Cannot retrieve user status.
-> * A: Renew your cookie file.
-
+>   * A: Renew your cookie file.
 > * Q: Exception: conversationSignature
-> * A: Clear all your bing cookie and renew your cookie file.
->   * Like : https://github.com/Integration-Automation/ReEdgeGPT/issues/17
+>   * A: Clear all your bing cookie and renew your cookie file.
+>   * Like: https://github.com/Integration-Automation/ReEdgeGPT/issues/17
 >   * And: https://github.com/Integration-Automation/ReEdgeGPT/issues/22
-
 > * Q: ValueError: Invalid header value b'_U=***\n'
 > * A: Renew your image cookie.
-
 > * Q: Image blocking or redirect error
-> * A: Now we can't generate multi image on same time (Cause bing limit)
->   * See https://github.com/Integration-Automation/ReEdgeGPT/issues/22 
-
+>   * A: Now we can't generate multi image on same time (Cause bing limit)
+>   * See https://github.com/Integration-Automation/ReEdgeGPT/issues/22
 > * Q: UnauthorizedRequest: Token issued by https://sydney.bing.com/sydney is invalid
-> * Bing block your connect, Try to use proxy or clear cookie.
+>   * A: Bing block your connect, Try to use proxy or clear cookie.
 
 </details>
 
